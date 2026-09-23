@@ -16,14 +16,17 @@
   <div class="max-w-7xl mx-auto space-y-6">
     
     <!-- Top Header -->
-    <div class="flex justify-between items-center border-b border-gray-800 pb-4">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-gray-800 pb-4 gap-4">
       <div>
         <h1 class="text-2xl font-bold text-white flex items-center gap-2">
           <span>📈</span> TraderEvolution Journal
         </h1>
-        <p class="text-xs text-gray-400 mt-1">Full execution FIFO matching • All trades & profits included</p>
+        <p class="text-xs text-gray-400 mt-1">Full execution FIFO matching • Auto-saves data locally</p>
       </div>
-      <div class="flex gap-3">
+      <div class="flex gap-2">
+        <button onclick="clearSavedData()" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-xs rounded-lg transition">
+          Clear Data
+        </button>
         <button onclick="loadDemoData()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-lg transition">
           Load Demo Data
         </button>
@@ -243,7 +246,10 @@
       if (e.target.files.length) handleFile(e.target.files[0]);
     });
 
-    document.getElementById('startingBalanceInput').addEventListener('input', () => updateDashboard());
+    document.getElementById('startingBalanceInput').addEventListener('input', () => {
+      saveToLocalStorage();
+      updateDashboard();
+    });
 
     function handleFile(file) {
       const reader = new FileReader();
@@ -342,6 +348,47 @@
       // Sort closed trades chronologically by exit time
       globalTrades.sort((a, b) => a.exitMs - b.exitMs);
 
+      saveToLocalStorage();
+      updateDashboard();
+    }
+
+    // Local Storage Functions for Persistence
+    function saveToLocalStorage() {
+      try {
+        localStorage.setItem('journal_trades', JSON.stringify(globalTrades));
+        localStorage.setItem('journal_balance', document.getElementById('startingBalanceInput').value);
+      } catch (e) {
+        console.warn('LocalStorage save failed:', e);
+      }
+    }
+
+    function loadSavedData() {
+      try {
+        const savedTrades = localStorage.getItem('journal_trades');
+        const savedBalance = localStorage.getItem('journal_balance');
+
+        if (savedBalance) {
+          document.getElementById('startingBalanceInput').value = savedBalance;
+        }
+
+        if (savedTrades) {
+          globalTrades = JSON.parse(savedTrades);
+          updateDashboard();
+        } else {
+          renderChart();
+        }
+      } catch (e) {
+        console.warn('LocalStorage load failed:', e);
+        renderChart();
+      }
+    }
+
+    function clearSavedData() {
+      try {
+        localStorage.removeItem('journal_trades');
+        localStorage.removeItem('journal_balance');
+      } catch (e) {}
+      globalTrades = [];
       updateDashboard();
     }
 
@@ -637,8 +684,8 @@
       parseCSVAndProcess(demoCSV);
     }
 
-    // Auto-initialize empty chart on load
-    renderChart();
+    // Load saved data when page opens
+    window.addEventListener('DOMContentLoaded', loadSavedData);
   </script>
 </body>
 </html>
