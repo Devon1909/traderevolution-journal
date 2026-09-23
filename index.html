@@ -33,6 +33,11 @@
       </div>
     </div>
 
+    <!-- Storage Notice -->
+    <div id="storageNotice" class="hidden p-3 bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs rounded-lg">
+      ⚠️ <b>Storage Alert:</b> Browser LocalStorage is restricted in this window mode. To ensure data stays saved on refresh, open the link directly in a standard browser tab.
+    </div>
+
     <!-- Drag & Drop Import Box -->
     <div id="dropZone" class="card p-6 border-2 border-dashed border-gray-700 hover:border-indigo-500 transition cursor-pointer text-center">
       <input type="file" id="fileInput" accept=".csv" class="hidden">
@@ -302,7 +307,6 @@
         const sym = fill.symbol;
         if (!openPositions[sym]) openPositions[sym] = [];
 
-        // Determine opening vs closing side
         const isBuy = fill.side.includes('BUY');
         const isSell = fill.side.includes('SELL');
 
@@ -310,18 +314,12 @@
           openPositions[sym].push(fill);
         } else {
           const matchLot = openPositions[sym][0];
-          
-          // Check if opposite side (matching entry to exit)
           const isMatch = (matchLot.side.includes('BUY') && isSell) || (matchLot.side.includes('SELL') && isBuy);
 
           if (isMatch) {
-            // Compute Entry -> Exit Duration
             const entryMs = matchLot.timeMs;
             const exitMs = fill.timeMs;
-
-            // Ensure Exit is strictly after Entry; if equal or reversed, use absolute diff
             const durationMs = Math.abs(exitMs - entryMs);
-
             const tradeSide = matchLot.side.includes('BUY') ? 'LONG' : 'SHORT';
 
             globalTrades.push({
@@ -352,41 +350,42 @@
       updateDashboard();
     }
 
-    // Local Storage Functions for Persistence
+    // Storage persistence logic
     function saveToLocalStorage() {
       try {
-        localStorage.setItem('journal_trades', JSON.stringify(globalTrades));
-        localStorage.setItem('journal_balance', document.getElementById('startingBalanceInput').value);
+        window.localStorage.setItem('te_journal_trades', JSON.stringify(globalTrades));
+        window.localStorage.setItem('te_journal_balance', document.getElementById('startingBalanceInput').value);
       } catch (e) {
-        console.warn('LocalStorage save failed:', e);
+        console.warn('LocalStorage save error:', e);
+        document.getElementById('storageNotice').classList.remove('hidden');
       }
     }
 
     function loadSavedData() {
       try {
-        const savedTrades = localStorage.getItem('journal_trades');
-        const savedBalance = localStorage.getItem('journal_balance');
+        const savedTrades = window.localStorage.getItem('te_journal_trades');
+        const savedBalance = window.localStorage.getItem('te_journal_balance');
 
         if (savedBalance) {
           document.getElementById('startingBalanceInput').value = savedBalance;
         }
 
         if (savedTrades) {
-          globalTrades = JSON.parse(savedTrades);
-          updateDashboard();
-        } else {
-          renderChart();
+          const parsed = JSON.parse(savedTrades);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            globalTrades = parsed;
+          }
         }
       } catch (e) {
-        console.warn('LocalStorage load failed:', e);
-        renderChart();
+        console.warn('LocalStorage load error:', e);
       }
+      updateDashboard();
     }
 
     function clearSavedData() {
       try {
-        localStorage.removeItem('journal_trades');
-        localStorage.removeItem('journal_balance');
+        window.localStorage.removeItem('te_journal_trades');
+        window.localStorage.removeItem('te_journal_balance');
       } catch (e) {}
       globalTrades = [];
       updateDashboard();
@@ -490,7 +489,6 @@
       renderTradesTable();
     }
 
-    // Chart Rendering
     function setChartType(mode) {
       currentChartMode = mode;
       document.getElementById('btnEquity').className = mode === 'equity' ? 'px-3 py-1 bg-indigo-600 text-white text-xs font-semibold rounded' : 'px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold rounded';
@@ -514,7 +512,6 @@
       globalTrades.forEach((t) => {
         cumulative += t.netPL;
         
-        // Short clean date label for X-axis (e.g. "Sep 23")
         const dateObj = new Date(t.exitMs);
         const cleanDateLabel = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         
@@ -600,7 +597,6 @@
       currentChart = new Chart(ctx, chartConfig);
     }
 
-    // Daily Performance Table
     function renderDailyTable() {
       const dailyMap = {};
       globalTrades.forEach(t => {
@@ -630,7 +626,6 @@
       `).join('');
     }
 
-    // Trades Log Table
     function renderTradesTable() {
       const search = document.getElementById('searchInput').value.toLowerCase();
       const side = document.getElementById('sideFilter').value;
@@ -669,7 +664,6 @@
       `).join('');
     }
 
-    // Demo Data Generator
     function loadDemoData() {
       const demoCSV = `Date/Time;Symbol;Side;Quantity;Price;Execution fee;Net P/L
 23 Sept 2026 07:19:33 am;BENF;BUY;300;2.38;1.50 USD;0.00 USD
@@ -684,8 +678,8 @@
       parseCSVAndProcess(demoCSV);
     }
 
-    // Load saved data when page opens
-    window.addEventListener('DOMContentLoaded', loadSavedData);
+    // Immediately run auto-restore when script loads
+    loadSavedData();
   </script>
 </body>
 </html>
