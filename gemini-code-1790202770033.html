@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TraderEvolution Journal</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #0b0f19; color: #f3f4f6; font-family: system-ui, -apple-system, sans-serif; }
+    .card { background-color: #111827; border: 1px solid #1f2937; border-radius: 0.75rem; }
+    .metric-title { font-size: 0.75rem; text-transform: uppercase; tracking: 0.05em; color: #9ca3af; font-weight: 600; }
+  </style>
+</head>
+<body class="p-6">
+  <div class="max-w-7xl mx-auto space-y-6">
+    
+    <!-- Top Header -->
+    <div class="flex justify-between items-center border-b border-gray-800 pb-4">
+      <div>
+        <h1 class="text-2xl font-bold text-white flex items-center gap-2">
+          <span>📈</span> TraderEvolution Journal
+        </h1>
+        <p class="text-xs text-gray-400 mt-1">Full execution FIFO matching • All trades & profits included</p>
+      </div>
+      <div class="flex gap-3">
+        <button onclick="loadDemoData()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-lg transition">
+          Load Demo Data
+        </button>
+      </div>
+    </div>
+
+    <!-- Drag & Drop Import Box -->
+    <div id="dropZone" class="card p-6 border-2 border-dashed border-gray-700 hover:border-indigo-500 transition cursor-pointer text-center">
+      <input type="file" id="fileInput" accept=".csv" class="hidden">
+      <div class="space-y-2">
+        <svg class="mx-auto h-8 w-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+        </svg>
+        <p class="text-sm text-gray-300">Drag and drop your <b>TraderEvolution CSV file</b> here, or <span class="text-indigo-400 font-semibold">browse</span></p>
+        <p class="text-xs text-gray-500">Parses semicolon-delimited TraderEvolution exports with execution fee accounting</p>
+      </div>
+    </div>
+
+    <!-- Key Metrics Grid -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="card p-4">
+        <span class="metric-title">Starting Balance</span>
+        <div class="mt-1 flex items-baseline gap-1">
+          <span class="text-gray-400 text-sm">$</span>
+          <input type="number" id="startingBalanceInput" value="50000" class="bg-gray-800 text-white font-bold text-lg rounded px-2 py-0.5 w-28 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+        </div>
+        <p class="text-[10px] text-gray-500 mt-1">Initial portfolio capital</p>
+      </div>
+
+      <div class="card p-4">
+        <span class="metric-title">Current Balance</span>
+        <div id="currentBalance" class="text-2xl font-bold mt-1 text-white">$50,000.00</div>
+        <div id="returnPercent" class="text-xs font-medium text-gray-400 mt-1">+0.00% Return</div>
+      </div>
+
+      <div class="card p-4">
+        <span class="metric-title">Net P&L</span>
+        <div id="netPL" class="text-2xl font-bold mt-1 text-white">$0.00</div>
+        <div id="totalFees" class="text-xs text-gray-400 mt-1">Total Fees: $0.00</div>
+      </div>
+
+      <div class="card p-4">
+        <span class="metric-title">Win Rate</span>
+        <div id="winRate" class="text-2xl font-bold mt-1 text-white">0.0%</div>
+        <div id="winCount" class="text-xs text-gray-400 mt-1">0 Wins / 0 Losses (0 Total)</div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 md:grid-cols-6 gap-4">
+      <div class="card p-4">
+        <span class="metric-title">Profit Factor</span>
+        <div id="profitFactor" class="text-xl font-bold mt-1 text-white">0.00</div>
+        <p class="text-[10px] text-gray-500 mt-1">Gross Win / Gross Loss</p>
+      </div>
+
+      <div class="card p-4">
+        <span class="metric-title">Trade Expectancy</span>
+        <div id="tradeExpectancy" class="text-xl font-bold mt-1 text-white">$0.00</div>
+        <p class="text-[10px] text-gray-500 mt-1">Expected return / trade</p>
+      </div>
+
+      <div class="card p-4">
+        <span class="metric-title">Avg Reward:Risk</span>
+        <div id="avgRR" class="text-xl font-bold mt-1 text-white">0.00 : 1</div>
+        <p class="text-[10px] text-gray-500 mt-1">Avg Win / Avg Loss</p>
+      </div>
+
+      <div class="card p-4">
+        <span class="metric-title">Avg Hold (Overall)</span>
+        <div id="avgHoldOverall" class="text-xl font-bold mt-1 text-white">0s</div>
+        <p class="text-[10px] text-gray-500 mt-1">Entry to Exit Avg</p>
+      </div>
+
+      <div class="card p-4">
+        <span class="metric-title">Avg Winner Hold</span>
+        <div id="avgHoldWinner" class="text-xl font-bold mt-1 text-emerald-400">0s</div>
+        <p id="avgWinAmount" class="text-[10px] text-emerald-500/80 mt-1">Avg Win: $0.00</p>
+      </div>
+
+      <div class="card p-4">
+        <span class="metric-title">Avg Loser Hold</span>
+        <div id="avgHoldLoser" class="text-xl font-bold mt-1 text-rose-400">0s</div>
+        <p id="avgLossAmount" class="text-[10px] text-rose-500/80 mt-1">Avg Loss: $0.00</p>
+      </div>
+    </div>
+
+    <!-- Gross Gains & Losses -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="card p-4">
+        <div class="flex justify-between items-center">
+          <span class="metric-title">Gross Profit</span>
+          <span id="maxWin" class="text-xs text-emerald-400 font-semibold">Max Win: $0.00</span>
+        </div>
+        <div id="grossProfit" class="text-xl font-bold mt-1 text-emerald-400">$0.00</div>
+      </div>
+
+      <div class="card p-4">
+        <div class="flex justify-between items-center">
+          <span class="metric-title">Gross Loss</span>
+          <span id="maxLoss" class="text-xs text-rose-400 font-semibold">Max Loss: $0.00</span>
+        </div>
+        <div id="grossLoss" class="text-xl font-bold mt-1 text-rose-400">$0.00</div>
+      </div>
+
+      <div class="card p-4">
+        <span class="metric-title">Total Executed Trades</span>
+        <div id="totalExecutedTrades" class="text-xl font-bold mt-1 text-white">0</div>
+        <p class="text-[10px] text-gray-500 mt-1">100% Trades Included</p>
+      </div>
+    </div>
+
+    <!-- Chart Section -->
+    <div class="card p-6">
+      <div class="flex justify-between items-center mb-4">
+        <div>
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <span>📈</span> Equity Curve & Performance Chart
+          </h2>
+          <p class="text-xs text-gray-400">Clean x-axis dates with zero gridlines; full date/time details appear on hover tooltips</p>
+        </div>
+        <div class="flex gap-2">
+          <button id="btnEquity" onclick="setChartType('equity')" class="px-3 py-1 bg-indigo-600 text-white text-xs font-semibold rounded">Equity Line</button>
+          <button id="btnBar" onclick="setChartType('bar')" class="px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold rounded">Trade P&L Bars</button>
+        </div>
+      </div>
+      <div class="h-80 w-full">
+        <canvas id="performanceChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Daily Performance & Executed Log -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      
+      <!-- Daily Summary -->
+      <div class="card p-6 lg:col-span-1">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-lg font-bold text-white">Daily Performance</h2>
+          <span id="dailyCount" class="text-xs px-2 py-1 bg-gray-800 text-gray-400 rounded">0 Days</span>
+        </div>
+        <div class="overflow-y-auto max-h-96 pr-1">
+          <table class="w-full text-xs text-left">
+            <thead class="text-gray-400 uppercase bg-gray-800/50 sticky top-0">
+              <tr>
+                <th class="p-2">Date</th>
+                <th class="p-2 text-center">Trades</th>
+                <th class="p-2 text-right">Daily P&L</th>
+              </tr>
+            </thead>
+            <tbody id="dailyTableBody" class="divide-y divide-gray-800 text-gray-300">
+              <tr><td colspan="3" class="p-4 text-center text-gray-500">No data loaded</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Executed Trades Log -->
+      <div class="card p-6 lg:col-span-2">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <span>📋</span> Executed Trades Log
+          </h2>
+          <div class="flex gap-2 w-full sm:w-auto">
+            <input type="text" id="searchInput" oninput="renderTradesTable()" placeholder="Search Symbol or Date..." class="bg-gray-800 border border-gray-700 text-xs rounded px-3 py-1.5 w-full sm:w-48 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            <select id="sideFilter" onchange="renderTradesTable()" class="bg-gray-800 border border-gray-700 text-xs rounded px-2 py-1.5 text-white focus:outline-none">
+              <option value="ALL">All Sides</option>
+              <option value="LONG">Long</option>
+              <option value="SHORT">Short</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto max-h-96">
+          <table class="w-full text-xs text-left">
+            <thead class="text-gray-400 uppercase bg-gray-800/50 sticky top-0">
+              <tr>
+                <th class="p-2">Entry Time</th>
+                <th class="p-2">Exit Time</th>
+                <th class="p-2">Symbol</th>
+                <th class="p-2">Side</th>
+                <th class="p-2 text-right">Qty</th>
+                <th class="p-2 text-right">Entry</th>
+                <th class="p-2 text-right">Exit</th>
+                <th class="p-2 text-center">Hold Duration</th>
+                <th class="p-2 text-right">Fee</th>
+                <th class="p-2 text-right">Net P&L</th>
+              </tr>
+            </thead>
+            <tbody id="tradesTableBody" class="divide-y divide-gray-800 text-gray-300">
+              <tr><td colspan="10" class="p-4 text-center text-gray-500">No data loaded</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    let globalTrades = [];
+    let currentChart = null;
+    let currentChartMode = 'equity';
+
+    // File Upload Handlers
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-indigo-500'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-indigo-500'));
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('border-indigo-500');
+      if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', (e) => {
+      if (e.target.files.length) handleFile(e.target.files[0]);
+    });
+
+    document.getElementById('startingBalanceInput').addEventListener('input', () => updateDashboard());
+
+    function handleFile(file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        parseCSVAndProcess(e.target.result);
+      };
+      reader.readAsText(file);
+    }
+
+    // TraderEvolution CSV Parser
+    function parseCSVAndProcess(csvText) {
+      const rawLines = csvText.trim().split('\n').filter(l => l.trim() !== '');
+      if (rawLines.length < 2) return;
+
+      // REVERSE rows so oldest executions are parsed first
+      const dataRows = rawLines.slice(1).reverse();
+
+      const fills = [];
+      dataRows.forEach(line => {
+        const row = line.split(';');
+        if (row.length < 7) return;
+
+        const dateTimeStr = row[0].replace(/"/g, '').trim();
+        const parsedDate = new Date(dateTimeStr);
+        const timeMs = isNaN(parsedDate.getTime()) ? Date.now() : parsedDate.getTime();
+
+        const sideRaw = (row[2] || '').replace(/"/g, '').trim().toUpperCase();
+        const qty = parseFloat((row[3] || '0').replace(/"/g, '').replace(/,/g, ''));
+        const price = parseFloat((row[4] || '0').replace(/"/g, '').replace(/,/g, ''));
+        const fee = Math.abs(parseFloat((row[5] || '0').replace(/"/g, '').replace(/USD/g, '').replace(/,/g, '')));
+        const netPL = parseFloat((row[6] || '0').replace(/"/g, '').replace(/USD/g, '').replace(/,/g, ''));
+
+        fills.push({
+          dateTimeStr,
+          timeMs,
+          symbol: (row[1] || 'UNKNOWN').replace(/"/g, '').trim(),
+          side: sideRaw,
+          qty,
+          price,
+          fee,
+          netPL
+        });
+      });
+
+      // FIFO Position Matching Engine
+      const openPositions = {};
+      globalTrades = [];
+
+      fills.forEach(fill => {
+        const sym = fill.symbol;
+        if (!openPositions[sym]) openPositions[sym] = [];
+
+        // Determine opening vs closing side
+        const isBuy = fill.side.includes('BUY');
+        const isSell = fill.side.includes('SELL');
+
+        if (openPositions[sym].length === 0) {
+          openPositions[sym].push(fill);
+        } else {
+          const matchLot = openPositions[sym][0];
+          
+          // Check if opposite side (matching entry to exit)
+          const isMatch = (matchLot.side.includes('BUY') && isSell) || (matchLot.side.includes('SELL') && isBuy);
+
+          if (isMatch) {
+            // Compute Entry -> Exit Duration
+            const entryMs = matchLot.timeMs;
+            const exitMs = fill.timeMs;
+
+            // Ensure Exit is strictly after Entry; if equal or reversed, use absolute diff
+            const durationMs = Math.abs(exitMs - entryMs);
+
+            const tradeSide = matchLot.side.includes('BUY') ? 'LONG' : 'SHORT';
+
+            globalTrades.push({
+              entryTime: matchLot.dateTimeStr,
+              exitTime: fill.dateTimeStr,
+              exitMs: exitMs,
+              symbol: sym,
+              side: tradeSide,
+              qty: fill.qty,
+              entryPrice: matchLot.price,
+              exitPrice: fill.price,
+              durationMs: durationMs,
+              fee: matchLot.fee + fill.fee,
+              netPL: fill.netPL
+            });
+
+            openPositions[sym].shift();
+          } else {
+            openPositions[sym].push(fill);
+          }
+        }
+      });
+
+      // Sort closed trades chronologically by exit time
+      globalTrades.sort((a, b) => a.exitMs - b.exitMs);
+
+      updateDashboard();
+    }
+
+    function formatDuration(ms) {
+      if (isNaN(ms) || ms <= 0) return '0s';
+      const sec = Math.floor(ms / 1000);
+      if (sec < 60) return `${sec}s`;
+      const min = Math.floor(sec / 60);
+      const remSec = sec % 60;
+      if (min < 60) return `${min}m ${remSec}s`;
+      const hr = Math.floor(min / 60);
+      const remMin = min % 60;
+      return `${hr}h ${remMin}m ${remSec}s`;
+    }
+
+    function formatMoney(amount) {
+      return (amount < 0 ? '-' : '') + '$' + Math.abs(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function updateDashboard() {
+      const startingBalance = parseFloat(document.getElementById('startingBalanceInput').value) || 50000;
+
+      let netPL = 0;
+      let grossProfit = 0;
+      let grossLoss = 0;
+      let totalFees = 0;
+      let winCount = 0;
+      let lossCount = 0;
+      let maxWin = 0;
+      let maxLoss = 0;
+
+      let totalHoldMs = 0;
+      let winnerHoldMs = 0;
+      let loserHoldMs = 0;
+
+      globalTrades.forEach(t => {
+        netPL += t.netPL;
+        totalFees += t.fee;
+        totalHoldMs += t.durationMs;
+
+        if (t.netPL > 0) {
+          grossProfit += t.netPL;
+          winCount++;
+          winnerHoldMs += t.durationMs;
+          if (t.netPL > maxWin) maxWin = t.netPL;
+        } else {
+          grossLoss += Math.abs(t.netPL);
+          lossCount++;
+          loserHoldMs += t.durationMs;
+          if (t.netPL < maxLoss) maxLoss = t.netPL;
+        }
+      });
+
+      const currentBalance = startingBalance + netPL;
+      const returnPct = ((netPL / startingBalance) * 100).toFixed(2);
+      const winRate = globalTrades.length ? ((winCount / globalTrades.length) * 100).toFixed(1) : '0.0';
+      const profitFactor = grossLoss > 0 ? (grossProfit / grossLoss).toFixed(2) : (grossProfit > 0 ? '∞' : '0.00');
+      const expectancy = globalTrades.length ? (netPL / globalTrades.length).toFixed(2) : '0.00';
+      
+      const avgWin = winCount > 0 ? (grossProfit / winCount) : 0;
+      const avgLoss = lossCount > 0 ? (grossLoss / lossCount) : 0;
+      const avgRR = avgLoss > 0 ? (avgWin / avgLoss).toFixed(2) : '0.00';
+
+      const avgHoldOverall = globalTrades.length ? Math.round(totalHoldMs / globalTrades.length) : 0;
+      const avgHoldWin = winCount ? Math.round(winnerHoldMs / winCount) : 0;
+      const avgHoldLoss = lossCount ? Math.round(loserHoldMs / lossCount) : 0;
+
+      // Update UI Metrics
+      document.getElementById('currentBalance').innerText = formatMoney(currentBalance);
+      document.getElementById('returnPercent').innerText = `${returnPct >= 0 ? '+' : ''}${returnPct}% Return`;
+      document.getElementById('returnPercent').className = `text-xs font-medium mt-1 ${returnPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+
+      document.getElementById('netPL').innerText = (netPL >= 0 ? '+' : '') + formatMoney(netPL);
+      document.getElementById('netPL').className = `text-2xl font-bold mt-1 ${netPL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+      document.getElementById('totalFees').innerText = `Total Fees: ${formatMoney(totalFees)}`;
+
+      document.getElementById('winRate').innerText = `${winRate}%`;
+      document.getElementById('winCount').innerText = `${winCount} Wins / ${lossCount} Losses (${globalTrades.length} Total)`;
+
+      document.getElementById('profitFactor').innerText = profitFactor;
+      document.getElementById('tradeExpectancy').innerText = (expectancy >= 0 ? '+' : '') + formatMoney(parseFloat(expectancy));
+      document.getElementById('avgRR').innerText = `${avgRR} : 1`;
+
+      document.getElementById('avgHoldOverall').innerText = formatDuration(avgHoldOverall);
+      document.getElementById('avgHoldWinner').innerText = formatDuration(avgHoldWin);
+      document.getElementById('avgHoldLoser').innerText = formatDuration(avgHoldLoss);
+
+      document.getElementById('avgWinAmount').innerText = `Avg Win: ${formatMoney(avgWin)}`;
+      document.getElementById('avgLossAmount').innerText = `Avg Loss: ${formatMoney(avgLoss)}`;
+
+      document.getElementById('grossProfit').innerText = formatMoney(grossProfit);
+      document.getElementById('grossLoss').innerText = formatMoney(grossLoss);
+      document.getElementById('maxWin').innerText = `Max Win: ${formatMoney(maxWin)}`;
+      document.getElementById('maxLoss').innerText = `Max Loss: ${formatMoney(maxLoss)}`;
+      document.getElementById('totalExecutedTrades').innerText = globalTrades.length;
+
+      renderChart();
+      renderDailyTable();
+      renderTradesTable();
+    }
+
+    // Chart Rendering
+    function setChartType(mode) {
+      currentChartMode = mode;
+      document.getElementById('btnEquity').className = mode === 'equity' ? 'px-3 py-1 bg-indigo-600 text-white text-xs font-semibold rounded' : 'px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold rounded';
+      document.getElementById('btnBar').className = mode === 'bar' ? 'px-3 py-1 bg-indigo-600 text-white text-xs font-semibold rounded' : 'px-3 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold rounded';
+      renderChart();
+    }
+
+    function renderChart() {
+      const ctx = document.getElementById('performanceChart').getContext('2d');
+      if (currentChart) currentChart.destroy();
+
+      const startingBalance = parseFloat(document.getElementById('startingBalanceInput').value) || 50000;
+      let cumulative = startingBalance;
+
+      const labels = [];
+      const equityData = [];
+      const barData = [];
+      const barColors = [];
+      const fullTooltips = [];
+
+      globalTrades.forEach((t) => {
+        cumulative += t.netPL;
+        
+        // Short clean date label for X-axis (e.g. "Sep 23")
+        const dateObj = new Date(t.exitMs);
+        const cleanDateLabel = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        
+        labels.push(cleanDateLabel);
+        equityData.push(cumulative);
+        barData.push(t.netPL);
+        barColors.push(t.netPL >= 0 ? 'rgba(52, 211, 153, 0.8)' : 'rgba(248, 113, 113, 0.8)');
+
+        fullTooltips.push({
+          fullTime: t.exitTime,
+          symbol: t.symbol,
+          netPL: t.netPL,
+          equity: cumulative
+        });
+      });
+
+      const chartConfig = {
+        type: currentChartMode === 'equity' ? 'line' : 'bar',
+        data: {
+          labels: labels,
+          datasets: currentChartMode === 'equity' ? [{
+            label: 'Account Balance',
+            data: equityData,
+            borderColor: '#6366f1',
+            backgroundColor: 'rgba(99, 102, 241, 0.1)',
+            fill: true,
+            tension: 0.2,
+            pointRadius: labels.length > 50 ? 0 : 3,
+            pointHoverRadius: 5
+          }] : [{
+            label: 'Trade P&L',
+            data: barData,
+            backgroundColor: barColors,
+            borderRadius: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                title: function(items) {
+                  const idx = items[0].dataIndex;
+                  return fullTooltips[idx] ? fullTooltips[idx].fullTime : '';
+                },
+                label: function(item) {
+                  const idx = item.dataIndex;
+                  const meta = fullTooltips[idx];
+                  if (currentChartMode === 'equity') {
+                    return `Balance: ${formatMoney(meta.equity)} (${meta.symbol}: ${formatMoney(meta.netPL)})`;
+                  } else {
+                    return `P&L: ${formatMoney(meta.netPL)} (${meta.symbol})`;
+                  }
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false, drawBorder: false },
+              ticks: {
+                color: '#9ca3af',
+                font: { size: 10 },
+                maxTicksLimit: 8,
+                autoSkip: true,
+                maxRotation: 0
+              }
+            },
+            y: {
+              grid: { display: false, drawBorder: false },
+              ticks: {
+                color: '#9ca3af',
+                font: { size: 10 },
+                callback: function(val) { return '$' + val.toLocaleString(); }
+              }
+            }
+          }
+        }
+      };
+
+      currentChart = new Chart(ctx, chartConfig);
+    }
+
+    // Daily Performance Table
+    function renderDailyTable() {
+      const dailyMap = {};
+      globalTrades.forEach(t => {
+        const dateKey = t.exitTime.split(' ')[0] + ' ' + (t.exitTime.split(' ')[1] || '') + ' ' + (t.exitTime.split(' ')[2] || '');
+        if (!dailyMap[dateKey]) dailyMap[dateKey] = { trades: 0, pnl: 0 };
+        dailyMap[dateKey].trades++;
+        dailyMap[dateKey].pnl += t.netPL;
+      });
+
+      const keys = Object.keys(dailyMap);
+      document.getElementById('dailyCount').innerText = `${keys.length} Days`;
+
+      const tbody = document.getElementById('dailyTableBody');
+      if (keys.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" class="p-4 text-center text-gray-500">No data loaded</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = keys.map(k => `
+        <tr class="hover:bg-gray-800/40">
+          <td class="p-2 font-medium">${k}</td>
+          <td class="p-2 text-center">${dailyMap[k].trades}</td>
+          <td class="p-2 text-right font-bold ${dailyMap[k].pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}">
+            ${dailyMap[k].pnl >= 0 ? '+' : ''}${formatMoney(dailyMap[k].pnl)}
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // Trades Log Table
+    function renderTradesTable() {
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      const side = document.getElementById('sideFilter').value;
+
+      const filtered = globalTrades.filter(t => {
+        const matchSearch = t.symbol.toLowerCase().includes(search) || t.entryTime.toLowerCase().includes(search) || t.exitTime.toLowerCase().includes(search);
+        const matchSide = side === 'ALL' || t.side === side;
+        return matchSearch && matchSide;
+      });
+
+      const tbody = document.getElementById('tradesTableBody');
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="10" class="p-4 text-center text-gray-500">No matching trades found</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(t => `
+        <tr class="hover:bg-gray-800/40">
+          <td class="p-2 whitespace-nowrap text-gray-400">${t.entryTime}</td>
+          <td class="p-2 whitespace-nowrap text-gray-400">${t.exitTime}</td>
+          <td class="p-2 font-bold text-white">${t.symbol}</td>
+          <td class="p-2">
+            <span class="px-1.5 py-0.5 text-[10px] font-bold rounded ${t.side === 'LONG' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'}">
+              ${t.side}
+            </span>
+          </td>
+          <td class="p-2 text-right">${t.qty.toLocaleString()}</td>
+          <td class="p-2 text-right">$${t.entryPrice.toFixed(2)}</td>
+          <td class="p-2 text-right">$${t.exitPrice.toFixed(2)}</td>
+          <td class="p-2 text-center font-medium text-amber-400">${formatDuration(t.durationMs)}</td>
+          <td class="p-2 text-right text-gray-400">$${t.fee.toFixed(2)}</td>
+          <td class="p-2 text-right font-bold ${t.netPL >= 0 ? 'text-emerald-400' : 'text-rose-400'}">
+            ${t.netPL >= 0 ? '+' : ''}${formatMoney(t.netPL)}
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // Demo Data Generator
+    function loadDemoData() {
+      const demoCSV = `Date/Time;Symbol;Side;Quantity;Price;Execution fee;Net P/L
+23 Sept 2026 07:19:33 am;BENF;BUY;300;2.38;1.50 USD;0.00 USD
+23 Sept 2026 07:20:40 am;BENF;SELL;300;2.48;1.50 USD;30.00 USD
+23 Sept 2026 07:38:56 am;BENF;BUY;200;2.26;1.00 USD;0.00 USD
+23 Sept 2026 07:40:13 am;BENF;SELL;200;2.37;1.00 USD;22.00 USD
+23 Sept 2026 07:59:04 am;MSS;BUY;400;2.19;2.00 USD;0.00 USD
+23 Sept 2026 08:01:18 am;MSS;SELL;400;2.46;2.00 USD;108.00 USD
+23 Sept 2026 08:04:56 am;MSS;BUY;100;2.55;0.63 USD;0.00 USD
+23 Sept 2026 08:05:09 am;MSS;SELL;100;2.93;0.50 USD;38.00 USD`;
+
+      parseCSVAndProcess(demoCSV);
+    }
+
+    // Auto-initialize empty chart on load
+    renderChart();
+  </script>
+</body>
+</html>
