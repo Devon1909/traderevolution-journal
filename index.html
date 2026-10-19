@@ -9,7 +9,7 @@
   <style>
     body { background-color: #0b0f19; color: #f3f4f6; font-family: system-ui, -apple-system, sans-serif; }
     .card { background-color: #111827; border: 1px solid #1f2937; border-radius: 0.75rem; }
-    .metric-title { font-size: 0.75rem; text-transform: uppercase; tracking: 0.05em; color: #9ca3af; font-weight: 600; }
+    .metric-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: #9ca3af; font-weight: 600; }
   </style>
 </head>
 <body class="p-6">
@@ -143,6 +143,38 @@
       </div>
     </div>
 
+    <!-- Monthly P&L Calendar Section -->
+    <div class="card p-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+        <div>
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            <span>📅</span> Monthly P&L Calendar
+          </h2>
+          <p class="text-xs text-gray-400">Interactive performance view broken down by calendar days</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="changeMonth(-1)" class="p-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+          </button>
+          <span id="calendarMonthTitle" class="text-sm font-bold text-white min-w-[140px] text-center">October 2026</span>
+          <button onclick="changeMonth(1)" class="p-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+          </button>
+          <button onclick="goToCurrentMonth()" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold rounded-lg transition ml-2">Today</button>
+        </div>
+      </div>
+
+      <!-- Calendar Grid Headers -->
+      <div class="grid grid-cols-7 gap-2 text-center text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">
+        <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+      </div>
+
+      <!-- Calendar Days Grid -->
+      <div id="calendarGrid" class="grid grid-cols-7 gap-2">
+        <!-- Rendered dynamically -->
+      </div>
+    </div>
+
     <!-- Chart Section -->
     <div class="card p-6">
       <div class="flex justify-between items-center mb-4">
@@ -234,6 +266,7 @@
     let globalTrades = [];
     let currentChart = null;
     let currentChartMode = 'equity';
+    let currentCalendarDate = new Date();
 
     // File Upload Handlers
     const dropZone = document.getElementById('dropZone');
@@ -269,9 +302,7 @@
       const rawLines = csvText.trim().split('\n').filter(l => l.trim() !== '');
       if (rawLines.length < 2) return;
 
-      // REVERSE rows so oldest executions are parsed first
       const dataRows = rawLines.slice(1).reverse();
-
       const fills = [];
       dataRows.forEach(line => {
         const row = line.split(';');
@@ -299,7 +330,6 @@
         });
       });
 
-      // FIFO Position Matching Engine
       const openPositions = {};
       globalTrades = [];
 
@@ -343,14 +373,11 @@
         }
       });
 
-      // Sort closed trades chronologically by exit time
       globalTrades.sort((a, b) => a.exitMs - b.exitMs);
-
       saveToLocalStorage();
       updateDashboard();
     }
 
-    // Storage persistence logic
     function saveToLocalStorage() {
       try {
         window.localStorage.setItem('te_journal_trades', JSON.stringify(globalTrades));
@@ -455,7 +482,6 @@
       const avgHoldWin = winCount ? Math.round(winnerHoldMs / winCount) : 0;
       const avgHoldLoss = lossCount ? Math.round(loserHoldMs / lossCount) : 0;
 
-      // Update UI Metrics
       document.getElementById('currentBalance').innerText = formatMoney(currentBalance);
       document.getElementById('returnPercent').innerText = `${returnPct >= 0 ? '+' : ''}${returnPct}% Return`;
       document.getElementById('returnPercent').className = `text-xs font-medium mt-1 ${returnPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
@@ -487,6 +513,92 @@
       renderChart();
       renderDailyTable();
       renderTradesTable();
+      renderCalendar();
+    }
+
+    function changeMonth(direction) {
+      currentCalendarDate.setMonth(currentCalendarDate.getMonth() + direction);
+      renderCalendar();
+    }
+
+    function goToCurrentMonth() {
+      currentCalendarDate = new Date();
+      renderCalendar();
+    }
+
+    function renderCalendar() {
+      const year = currentCalendarDate.getFullYear();
+      const month = currentCalendarDate.getMonth();
+      
+      const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+      document.getElementById('calendarMonthTitle').innerText = `${monthNames[month]} ${year}`;
+
+      const dailyMap = {};
+      globalTrades.forEach(t => {
+        const d = new Date(t.exitMs);
+        if (!isNaN(d.getTime())) {
+          const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+          if (!dailyMap[dateKey]) dailyMap[dateKey] = { trades: 0, pnl: 0 };
+          dailyMap[dateKey].trades++;
+          dailyMap[dateKey].pnl += t.netPL;
+        }
+      });
+
+      const firstDayIndex = new Date(year, month, 1).getDay();
+      const totalDays = new Date(year, month + 1, 0).getDate();
+      
+      const grid = document.getElementById('calendarGrid');
+      grid.innerHTML = '';
+
+      for (let i = 0; i < firstDayIndex; i++) {
+        const blankCard = document.createElement('div');
+        blankCard.className = 'card min-h-[90px] bg-gray-900/30 border-gray-800/40 opacity-40 p-2';
+        grid.appendChild(blankCard);
+      }
+
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      for (let day = 1; day <= totalDays; day++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dayData = dailyMap[dateStr];
+        const isToday = (dateStr === todayStr);
+
+        const dayCard = document.createElement('div');
+        let cardClasses = 'card min-h-[90px] p-2 flex flex-col justify-between transition ';
+        
+        if (isToday) {
+          cardClasses += 'ring-2 ring-indigo-500 ';
+        }
+
+        if (dayData) {
+          if (dayData.pnl >= 0) {
+            cardClasses += 'bg-emerald-950/20 border-emerald-900/60';
+          } else {
+            cardClasses += 'bg-rose-950/20 border-rose-900/60';
+          }
+        } else {
+          cardClasses += 'bg-gray-900/20 border-gray-800/60';
+        }
+
+        dayCard.className = cardClasses;
+
+        let content = `<div class="flex justify-between items-start text-xs"><span class="${isToday ? 'bg-indigo-600 text-white px-1.5 py-0.5 rounded-full font-bold' : 'text-gray-400 font-medium'}">${day}</span>`;
+        if (dayData) {
+          content += `<span class="text-[10px] px-1.5 py-0.5 bg-gray-800 text-gray-300 rounded">${dayData.trades} trade${dayData.trades > 1 ? 's' : ''}</span>`;
+        }
+        content += `</div>`;
+
+        if (dayData) {
+          const pnlFormatted = (dayData.pnl >= 0 ? '+' : '') + formatMoney(dayData.pnl);
+          const pnlColor = dayData.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400';
+          content += `<div class="mt-2 text-right font-bold text-sm ${pnlColor}">${pnlFormatted}</div>`;
+        } else {
+          content += `<div class="mt-2 text-right text-xs text-gray-600">—</div>`;
+        }
+
+        dayCard.innerHTML = content;
+        grid.appendChild(dayCard);
+      }
     }
 
     function setChartType(mode) {
@@ -511,7 +623,6 @@
 
       globalTrades.forEach((t) => {
         cumulative += t.netPL;
-        
         const dateObj = new Date(t.exitMs);
         const cleanDateLabel = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         
@@ -678,7 +789,6 @@
       parseCSVAndProcess(demoCSV);
     }
 
-    // Immediately run auto-restore when script loads
     loadSavedData();
   </script>
 </body>
