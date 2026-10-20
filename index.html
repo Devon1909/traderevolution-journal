@@ -21,7 +21,7 @@
         <h1 class="text-2xl font-bold text-white flex items-center gap-2">
           <span>📈</span> TraderEvolution Journal
         </h1>
-        <p class="text-xs text-gray-400 mt-1">Full execution FIFO matching • Auto-saves data locally</p>
+        <p class="text-xs text-gray-400 mt-1">Direct broker CSV execution sync • Auto-saves data locally</p>
       </div>
       <div class="flex gap-2">
         <button onclick="clearSavedData()" class="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold text-xs rounded-lg transition">
@@ -46,7 +46,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
         </svg>
         <p class="text-sm text-gray-300">Drag and drop your <b>TraderEvolution CSV file</b> here, or <span class="text-indigo-400 font-semibold">browse</span></p>
-        <p class="text-xs text-gray-500">Parses semicolon-delimited TraderEvolution exports with execution fee accounting</p>
+        <p class="text-xs text-gray-500">Parses semicolon-delimited TraderEvolution exports with precise net P&L accounting</p>
       </div>
     </div>
 
@@ -101,19 +101,19 @@
 
       <div class="card p-4">
         <span class="metric-title">Avg Hold (Overall)</span>
-        <div id="avgHoldOverall" class="text-xl font-bold mt-1 text-white">0s</div>
+        <div id="avgHoldOverall" class="text-xl font-bold mt-1 text-white">N/A</div>
         <p class="text-[10px] text-gray-500 mt-1">Entry to Exit Avg</p>
       </div>
 
       <div class="card p-4">
         <span class="metric-title">Avg Winner Hold</span>
-        <div id="avgHoldWinner" class="text-xl font-bold mt-1 text-emerald-400">0s</div>
+        <div id="avgHoldWinner" class="text-xl font-bold text-emerald-400 mt-1">N/A</div>
         <p id="avgWinAmount" class="text-[10px] text-emerald-500/80 mt-1">Avg Win: $0.00</p>
       </div>
 
       <div class="card p-4">
         <span class="metric-title">Avg Loser Hold</span>
-        <div id="avgHoldLoser" class="text-xl font-bold mt-1 text-rose-400">0s</div>
+        <div id="avgHoldLoser" class="text-xl font-bold text-rose-400 mt-1">N/A</div>
         <p id="avgLossAmount" class="text-[10px] text-rose-500/80 mt-1">Avg Loss: $0.00</p>
       </div>
     </div>
@@ -139,7 +139,7 @@
       <div class="card p-4">
         <span class="metric-title">Total Executed Trades</span>
         <div id="totalExecutedTrades" class="text-xl font-bold mt-1 text-white">0</div>
-        <p class="text-[10px] text-gray-500 mt-1">100% Trades Included</p>
+        <p class="text-[10px] text-gray-500 mt-1">100% Executions Included</p>
       </div>
     </div>
 
@@ -208,7 +208,7 @@
             <thead class="text-gray-400 uppercase bg-gray-800/50 sticky top-0">
               <tr>
                 <th class="p-2">Date</th>
-                <th class="p-2 text-center">Trades</th>
+                <th class="p-2 text-center">Executions</th>
                 <th class="p-2 text-right">Daily P&L</th>
               </tr>
             </thead>
@@ -229,8 +229,8 @@
             <input type="text" id="searchInput" oninput="renderTradesTable()" placeholder="Search Symbol or Date..." class="bg-gray-800 border border-gray-700 text-xs rounded px-3 py-1.5 w-full sm:w-48 text-white focus:outline-none focus:ring-1 focus:ring-indigo-500">
             <select id="sideFilter" onchange="renderTradesTable()" class="bg-gray-800 border border-gray-700 text-xs rounded px-2 py-1.5 text-white focus:outline-none">
               <option value="ALL">All Sides</option>
-              <option value="LONG">Long</option>
-              <option value="SHORT">Short</option>
+              <option value="BUY">Buy</option>
+              <option value="SELL">Sell</option>
             </select>
           </div>
         </div>
@@ -239,20 +239,17 @@
           <table class="w-full text-xs text-left">
             <thead class="text-gray-400 uppercase bg-gray-800/50 sticky top-0">
               <tr>
-                <th class="p-2">Entry Time</th>
-                <th class="p-2">Exit Time</th>
+                <th class="p-2">Date/Time</th>
                 <th class="p-2">Symbol</th>
                 <th class="p-2">Side</th>
                 <th class="p-2 text-right">Qty</th>
-                <th class="p-2 text-right">Entry</th>
-                <th class="p-2 text-right">Exit</th>
-                <th class="p-2 text-center">Hold Duration</th>
+                <th class="p-2 text-right">Price</th>
                 <th class="p-2 text-right">Fee</th>
                 <th class="p-2 text-right">Net P&L</th>
               </tr>
             </thead>
             <tbody id="tradesTableBody" class="divide-y divide-gray-800 text-gray-300">
-              <tr><td colspan="10" class="p-4 text-center text-gray-500">No data loaded</td></tr>
+              <tr><td colspan="7" class="p-4 text-center text-gray-500">No data loaded</td></tr>
             </tbody>
           </table>
         </div>
@@ -297,13 +294,14 @@
       reader.readAsText(file);
     }
 
-    // TraderEvolution CSV Parser
+    // TraderEvolution Direct CSV Parser
     function parseCSVAndProcess(csvText) {
       const rawLines = csvText.trim().split('\n').filter(l => l.trim() !== '');
       if (rawLines.length < 2) return;
 
-      const dataRows = rawLines.slice(1).reverse();
-      const fills = [];
+      const dataRows = rawLines.slice(1).reverse(); // Oldest first for chronological equity curve
+      globalTrades = [];
+
       dataRows.forEach(line => {
         const row = line.split(';');
         if (row.length < 7) return;
@@ -312,17 +310,18 @@
         const parsedDate = new Date(dateTimeStr);
         const timeMs = isNaN(parsedDate.getTime()) ? Date.now() : parsedDate.getTime();
 
-        const sideRaw = (row[2] || '').replace(/"/g, '').trim().toUpperCase();
+        const symbol = (row[1] || 'UNKNOWN').replace(/"/g, '').trim();
+        const side = (row[2] || '').replace(/"/g, '').trim().toUpperCase();
         const qty = parseFloat((row[3] || '0').replace(/"/g, '').replace(/,/g, ''));
         const price = parseFloat((row[4] || '0').replace(/"/g, '').replace(/,/g, ''));
         const fee = Math.abs(parseFloat((row[5] || '0').replace(/"/g, '').replace(/USD/g, '').replace(/,/g, '')));
         const netPL = parseFloat((row[6] || '0').replace(/"/g, '').replace(/USD/g, '').replace(/,/g, ''));
 
-        fills.push({
+        globalTrades.push({
           dateTimeStr,
           timeMs,
-          symbol: (row[1] || 'UNKNOWN').replace(/"/g, '').trim(),
-          side: sideRaw,
+          symbol,
+          side,
           qty,
           price,
           fee,
@@ -330,50 +329,9 @@
         });
       });
 
-      const openPositions = {};
-      globalTrades = [];
+      // Sort chronologically by time
+      globalTrades.sort((a, b) => a.timeMs - b.timeMs);
 
-      fills.forEach(fill => {
-        const sym = fill.symbol;
-        if (!openPositions[sym]) openPositions[sym] = [];
-
-        const isBuy = fill.side.includes('BUY');
-        const isSell = fill.side.includes('SELL');
-
-        if (openPositions[sym].length === 0) {
-          openPositions[sym].push(fill);
-        } else {
-          const matchLot = openPositions[sym][0];
-          const isMatch = (matchLot.side.includes('BUY') && isSell) || (matchLot.side.includes('SELL') && isBuy);
-
-          if (isMatch) {
-            const entryMs = matchLot.timeMs;
-            const exitMs = fill.timeMs;
-            const durationMs = Math.abs(exitMs - entryMs);
-            const tradeSide = matchLot.side.includes('BUY') ? 'LONG' : 'SHORT';
-
-            globalTrades.push({
-              entryTime: matchLot.dateTimeStr,
-              exitTime: fill.dateTimeStr,
-              exitMs: exitMs,
-              symbol: sym,
-              side: tradeSide,
-              qty: fill.qty,
-              entryPrice: matchLot.price,
-              exitPrice: fill.price,
-              durationMs: durationMs,
-              fee: matchLot.fee + fill.fee,
-              netPL: fill.netPL
-            });
-
-            openPositions[sym].shift();
-          } else {
-            openPositions[sym].push(fill);
-          }
-        }
-      });
-
-      globalTrades.sort((a, b) => a.exitMs - b.exitMs);
       saveToLocalStorage();
       updateDashboard();
     }
@@ -418,18 +376,6 @@
       updateDashboard();
     }
 
-    function formatDuration(ms) {
-      if (isNaN(ms) || ms <= 0) return '0s';
-      const sec = Math.floor(ms / 1000);
-      if (sec < 60) return `${sec}s`;
-      const min = Math.floor(sec / 60);
-      const remSec = sec % 60;
-      if (min < 60) return `${min}m ${remSec}s`;
-      const hr = Math.floor(min / 60);
-      const remMin = min % 60;
-      return `${hr}h ${remMin}m ${remSec}s`;
-    }
-
     function formatMoney(amount) {
       return (amount < 0 ? '-' : '') + '$' + Math.abs(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
@@ -446,24 +392,17 @@
       let maxWin = 0;
       let maxLoss = 0;
 
-      let totalHoldMs = 0;
-      let winnerHoldMs = 0;
-      let loserHoldMs = 0;
-
       globalTrades.forEach(t => {
         netPL += t.netPL;
         totalFees += t.fee;
-        totalHoldMs += t.durationMs;
 
         if (t.netPL > 0) {
           grossProfit += t.netPL;
           winCount++;
-          winnerHoldMs += t.durationMs;
           if (t.netPL > maxWin) maxWin = t.netPL;
-        } else {
+        } else if (t.netPL < 0) {
           grossLoss += Math.abs(t.netPL);
           lossCount++;
-          loserHoldMs += t.durationMs;
           if (t.netPL < maxLoss) maxLoss = t.netPL;
         }
       });
@@ -477,10 +416,6 @@
       const avgWin = winCount > 0 ? (grossProfit / winCount) : 0;
       const avgLoss = lossCount > 0 ? (grossLoss / lossCount) : 0;
       const avgRR = avgLoss > 0 ? (avgWin / avgLoss).toFixed(2) : '0.00';
-
-      const avgHoldOverall = globalTrades.length ? Math.round(totalHoldMs / globalTrades.length) : 0;
-      const avgHoldWin = winCount ? Math.round(winnerHoldMs / winCount) : 0;
-      const avgHoldLoss = lossCount ? Math.round(loserHoldMs / lossCount) : 0;
 
       document.getElementById('currentBalance').innerText = formatMoney(currentBalance);
       document.getElementById('returnPercent').innerText = `${returnPct >= 0 ? '+' : ''}${returnPct}% Return`;
@@ -497,9 +432,9 @@
       document.getElementById('tradeExpectancy').innerText = (expectancy >= 0 ? '+' : '') + formatMoney(parseFloat(expectancy));
       document.getElementById('avgRR').innerText = `${avgRR} : 1`;
 
-      document.getElementById('avgHoldOverall').innerText = formatDuration(avgHoldOverall);
-      document.getElementById('avgHoldWinner').innerText = formatDuration(avgHoldWin);
-      document.getElementById('avgHoldLoser').innerText = formatDuration(avgHoldLoss);
+      document.getElementById('avgHoldOverall').innerText = 'N/A';
+      document.getElementById('avgHoldWinner').innerText = 'N/A';
+      document.getElementById('avgHoldLoser').innerText = 'N/A';
 
       document.getElementById('avgWinAmount').innerText = `Avg Win: ${formatMoney(avgWin)}`;
       document.getElementById('avgLossAmount').innerText = `Avg Loss: ${formatMoney(avgLoss)}`;
@@ -535,7 +470,7 @@
 
       const dailyMap = {};
       globalTrades.forEach(t => {
-        const d = new Date(t.exitMs);
+        const d = new Date(t.timeMs);
         if (!isNaN(d.getTime())) {
           const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
           if (!dailyMap[dateKey]) dailyMap[dateKey] = { trades: 0, pnl: 0 };
@@ -584,7 +519,7 @@
 
         let content = `<div class="flex justify-between items-start text-xs"><span class="${isToday ? 'bg-indigo-600 text-white px-1.5 py-0.5 rounded-full font-bold' : 'text-gray-400 font-medium'}">${day}</span>`;
         if (dayData) {
-          content += `<span class="text-[10px] px-1.5 py-0.5 bg-gray-800 text-gray-300 rounded">${dayData.trades} trade${dayData.trades > 1 ? 's' : ''}</span>`;
+          content += `<span class="text-[10px] px-1.5 py-0.5 bg-gray-800 text-gray-300 rounded">${dayData.trades} exec</span>`;
         }
         content += `</div>`;
 
@@ -623,7 +558,7 @@
 
       globalTrades.forEach((t) => {
         cumulative += t.netPL;
-        const dateObj = new Date(t.exitMs);
+        const dateObj = new Date(t.timeMs);
         const cleanDateLabel = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         
         labels.push(cleanDateLabel);
@@ -632,7 +567,7 @@
         barColors.push(t.netPL >= 0 ? 'rgba(52, 211, 153, 0.8)' : 'rgba(248, 113, 113, 0.8)');
 
         fullTooltips.push({
-          fullTime: t.exitTime,
+          fullTime: t.dateTimeStr,
           symbol: t.symbol,
           netPL: t.netPL,
           equity: cumulative
@@ -653,7 +588,7 @@
             pointRadius: labels.length > 50 ? 0 : 3,
             pointHoverRadius: 5
           }] : [{
-            label: 'Trade P&L',
+            label: 'Net P&L',
             data: barData,
             backgroundColor: barColors,
             borderRadius: 2
@@ -711,7 +646,10 @@
     function renderDailyTable() {
       const dailyMap = {};
       globalTrades.forEach(t => {
-        const dateKey = t.exitTime.split(' ')[0] + ' ' + (t.exitTime.split(' ')[1] || '') + ' ' + (t.exitTime.split(' ')[2] || '');
+        // Extract just the Date part (e.g., "20 Oct 2026") from dateTimeStr ("20 Oct 2026 10:13:34 am")
+        const parts = t.dateTimeStr.split(' ');
+        const dateKey = parts.length >= 3 ? `${parts[0]} ${parts[1]} ${parts[2]}` : t.dateTimeStr;
+
         if (!dailyMap[dateKey]) dailyMap[dateKey] = { trades: 0, pnl: 0 };
         dailyMap[dateKey].trades++;
         dailyMap[dateKey].pnl += t.netPL;
@@ -742,31 +680,28 @@
       const side = document.getElementById('sideFilter').value;
 
       const filtered = globalTrades.filter(t => {
-        const matchSearch = t.symbol.toLowerCase().includes(search) || t.entryTime.toLowerCase().includes(search) || t.exitTime.toLowerCase().includes(search);
+        const matchSearch = t.symbol.toLowerCase().includes(search) || t.dateTimeStr.toLowerCase().includes(search);
         const matchSide = side === 'ALL' || t.side === side;
         return matchSearch && matchSide;
       });
 
       const tbody = document.getElementById('tradesTableBody');
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" class="p-4 text-center text-gray-500">No matching trades found</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-gray-500">No matching trades found</td></tr>`;
         return;
       }
 
       tbody.innerHTML = filtered.map(t => `
         <tr class="hover:bg-gray-800/40">
-          <td class="p-2 whitespace-nowrap text-gray-400">${t.entryTime}</td>
-          <td class="p-2 whitespace-nowrap text-gray-400">${t.exitTime}</td>
+          <td class="p-2 whitespace-nowrap text-gray-400">${t.dateTimeStr}</td>
           <td class="p-2 font-bold text-white">${t.symbol}</td>
           <td class="p-2">
-            <span class="px-1.5 py-0.5 text-[10px] font-bold rounded ${t.side === 'LONG' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'}">
+            <span class="px-1.5 py-0.5 text-[10px] font-bold rounded ${t.side === 'BUY' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'}">
               ${t.side}
             </span>
           </td>
           <td class="p-2 text-right">${t.qty.toLocaleString()}</td>
-          <td class="p-2 text-right">$${t.entryPrice.toFixed(2)}</td>
-          <td class="p-2 text-right">$${t.exitPrice.toFixed(2)}</td>
-          <td class="p-2 text-center font-medium text-amber-400">${formatDuration(t.durationMs)}</td>
+          <td class="p-2 text-right">$${t.price.toFixed(2)}</td>
           <td class="p-2 text-right text-gray-400">$${t.fee.toFixed(2)}</td>
           <td class="p-2 text-right font-bold ${t.netPL >= 0 ? 'text-emerald-400' : 'text-rose-400'}">
             ${t.netPL >= 0 ? '+' : ''}${formatMoney(t.netPL)}
